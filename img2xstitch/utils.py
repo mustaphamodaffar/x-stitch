@@ -1,7 +1,7 @@
 import logging
 import pandas as pd
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from sklearn.cluster import KMeans
 from scipy.spatial import distance, cKDTree
 
@@ -10,6 +10,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO, date
 
 class PreprocessImg:
     """Contort the input image to our specifications"""
+
     def __init__(self, img_raw_path, max_dim_abs_size):
         self.img_raw_path = img_raw_path
         self.img_raw_width = None
@@ -20,8 +21,6 @@ class PreprocessImg:
         self.max_dim_abs_size = max_dim_abs_size
         self.img_scaled_width = None
         self.img_scaled_height = None
-
-        self.run()
 
     def get_img_attr(self):
         """Get width, height and image format"""
@@ -38,7 +37,7 @@ class PreprocessImg:
 
     def calc_scaled_size(self):
         """Calculate scaled size based on maximum absolute size provided while maintaining aspect ratio"""
-        img_scale_factor = self.max_dim_abs_size/max(self.img_raw_height, self.img_raw_width)
+        img_scale_factor = self.max_dim_abs_size / max(self.img_raw_height, self.img_raw_width)
 
         if self.img_raw_orientation == 'Portrait':
             self.img_scaled_height = self.max_dim_abs_size
@@ -51,7 +50,7 @@ class PreprocessImg:
         """Scale the image using dimensions provided"""
         tuple_size = (self.img_scaled_width, self.img_scaled_height)
         with Image.open(self.img_raw_path) as img_raw:
-            img_scaled = img_raw.resize(size=tuple_size, resample=Image.LANCZOS) # Slowest but highest quality filter
+            img_scaled = img_raw.resize(size=tuple_size, resample=Image.LANCZOS)  # Slowest but highest quality filter
 
         return img_scaled
 
@@ -60,10 +59,14 @@ class PreprocessImg:
         self.get_img_attr()
         self.get_orientation()
         self.calc_scaled_size()
+        img_scaled = self.get_scaled_image()
+
+        return img_scaled
 
 
 class MapImgToThread():
     """Map pixels to closest thread colours"""
+
     def __init__(self, thread_map_path, img_input, cnt_stitch, cnt_colors):
         self.thread_map_path = thread_map_path
         self.img_input = img_input
@@ -84,7 +87,7 @@ class MapImgToThread():
 
         # Perform color quantization by use of the k-means method
         arr_input_img = np.array(self.img_input)
-        arr_reshape_img = arr_input_img.reshape(-1,3)
+        arr_reshape_img = arr_input_img.reshape(-1, 3)
 
         kmeans = KMeans(n_clusters=self.cnt_colors, random_state=7).fit(arr_reshape_img)
         color_labels = kmeans.labels_
@@ -99,10 +102,62 @@ class MapImgToThread():
         arr_thread_palette = np.array(self.thread_palette)
         arr_output_img = arr_thread_palette[thread_indices].reshape(arr_input_img.shape).astype('uint8')
         output_img = Image.fromarray(arr_output_img)
-        output_img.show()
 
-        # Create a summary of the thread colors
+        # Create a summary of the thread colors, add into logging later
         for i, v in enumerate(set(thread_indices)):
             print("Closest DMC RGB color: ", self.df_thread_map['rgb_tuple'].iloc[v])
             print("Closest DMC floss code: ", self.df_thread_map['floss'].iloc[v])
             print("Closest DMC floss name: ", self.df_thread_map['description'].iloc[v], "\n")
+
+        return output_img
+
+    def run(self):
+        """Take the inputs and return an image mapped to the specified thread palette"""
+        self.create_thread_palette()
+        output_img = self.map_img_colors()
+
+        return output_img
+
+
+class MapImgToPattern():
+    """Apply the overlays required to return a cross stitch pattern over the input image with a thread key"""
+
+    def __init__(self, img_input, enlarge_factor=25):
+        self.img_input = img_input
+        self.enlarge_factor = enlarge_factor
+        # self.cnt_stitch = cnt_stitch
+        # self.cnt_colors = cnt_colors
+
+    def img_enlarge(self):
+        enlarged_img_size = (self.img_input.width*self.enlarge_factor, self.img_input.height*self.enlarge_factor)
+        img_enlarged = self.img_input.resize(size=enlarged_img_size, resample=Image.NEAREST)
+        return img_enlarged
+
+    def add_gridlines(self, img_enlarged, color, step_size):
+        """ Add a border to distinguish each pixel or a group of pixels"""
+        draw = ImageDraw.Draw(img_enlarged)
+
+        y_start = 0
+        y_end = img_enlarged.height
+        # step_size = self.enlarge_factor  # A step every stitch
+
+        for x in range(0, img_enlarged.width, step_size):
+            line = ((x, y_start), (x, y_end))
+            draw.line(line, fill=color)
+
+        x_start = 0
+        x_end = img_enlarged.width
+
+        for y in range(0, img_enlarged.height, step_size):
+            line = ((x_start, y), (x_end, y))
+            draw.line(line, fill=color)
+
+        del draw
+        return img_enlarged
+
+    def run(self):
+        enlarged_image = self.img_enlarge()
+        minor_gridlines_image = self.add_gridlines(enlarged_image, 'grey', self.enlarge_factor)
+        major_gridlines_image = self.add_gridlines(minor_gridlines_image, 'black', self.enlarge_factor*10)
+
+        return major_gridlines_image
