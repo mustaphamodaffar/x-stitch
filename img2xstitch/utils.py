@@ -11,7 +11,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO, date
 class PreprocessImg:
     """Contort the input image to our specifications"""
 
-    def __init__(self, img_raw_path, max_dim_abs_size):
+    def __init__(self, img_raw_path: object, max_dim_abs_size: object) -> object:
         self.img_raw_path = img_raw_path
         self.img_raw_width = None
         self.img_raw_height = None
@@ -64,7 +64,7 @@ class PreprocessImg:
         return img_scaled
 
 
-class MapImgToThread():
+class MapImgToThread:
     """Map pixels to closest thread colours"""
 
     def __init__(self, thread_map_path, img_input, cnt_stitch, cnt_colors):
@@ -119,7 +119,7 @@ class MapImgToThread():
         return output_img
 
 
-class MapImgToPattern():
+class MapImgToPattern:
     """Apply the overlays required to return a cross stitch pattern over the input image with a thread key"""
 
     def __init__(self, img_input, enlarge_factor=25):
@@ -139,7 +139,6 @@ class MapImgToPattern():
 
         y_start = 0
         y_end = img_enlarged.height
-        # step_size = self.enlarge_factor  # A step every stitch
 
         for x in range(0, img_enlarged.width, step_size):
             line = ((x, y_start), (x, y_end))
