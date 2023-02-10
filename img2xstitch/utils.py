@@ -1,9 +1,10 @@
 import logging
 import pandas as pd
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from sklearn.cluster import KMeans
 from scipy.spatial import distance, cKDTree
+import random
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO, datefmt='%d-%b-%y %H:%M:%S')
 
@@ -103,30 +104,32 @@ class MapImgToThread:
         arr_output_img = arr_thread_palette[thread_indices].reshape(arr_input_img.shape).astype('uint8')
         output_img = Image.fromarray(arr_output_img)
 
+        # Create an output df of the thread colors in the output image
+        df_output_palette = self.df_thread_map[self.df_thread_map.index.isin(set(thread_indices))]
+
         # Create a summary of the thread colors, add into logging later
         for i, v in enumerate(set(thread_indices)):
             print("Closest DMC RGB color: ", self.df_thread_map['rgb_tuple'].iloc[v])
             print("Closest DMC floss code: ", self.df_thread_map['floss'].iloc[v])
             print("Closest DMC floss name: ", self.df_thread_map['description'].iloc[v], "\n")
 
-        return output_img
+        return output_img, df_output_palette
 
     def run(self):
         """Take the inputs and return an image mapped to the specified thread palette"""
         self.create_thread_palette()
-        output_img = self.map_img_colors()
+        output_img, df_output_palette = self.map_img_colors()
 
-        return output_img
+        return output_img, df_output_palette
 
 
 class MapImgToPattern:
     """Apply the overlays required to return a cross stitch pattern over the input image with a thread key"""
 
-    def __init__(self, img_input, enlarge_factor=25):
+    def __init__(self, img_input, cnt_colors, enlarge_factor=25):
         self.img_input = img_input
         self.enlarge_factor = enlarge_factor
-        # self.cnt_stitch = cnt_stitch
-        # self.cnt_colors = cnt_colors
+        self.cnt_colors = cnt_colors
 
     def img_enlarge(self):
         enlarged_img_size = (self.img_input.width*self.enlarge_factor, self.img_input.height*self.enlarge_factor)
@@ -154,9 +157,45 @@ class MapImgToPattern:
         del draw
         return img_enlarged
 
-    def run(self):
+    def map_colors_to_symbols(self, df_colors):
+        """Create a list of symbols that can used to represent each color on the pattern"""
+        symbols = []
+        # The geometric shapes segment of the unicode character kingdom contains 96 symbols
+        # So our color limit is 96 colors, unless we want to repeat symbols...
+        for i in range(0x25A0, 0x2600):
+            symbol = chr(i)
+            symbols.append(symbol)
+
+        # Get the symbol quantity required and assign to our palette
+        random_symbols = random.sample(symbols, len(df_colors))
+        df_colors['symbol'] = random_symbols
+
+        return df_colors
+
+    def add_symbols(self, df_colors, img_input, step_size):
+        """Superimpose the mapped symbols onto each stitch in the pattern"""
+        # Most default fonts wouldn't work
+        symbol_font = ImageFont.truetype('static/BabelStoneHan.ttf', 20)
+        draw = ImageDraw.Draw(img_input)
+
+        # This will be slow and needs to be looked at when it comes to the efficiency stage
+        for x in range(0, img_input.width, step_size):
+            for y in range(0, img_input.height, step_size):
+                pixel = img_input.getpixel((x, y))
+                df_pixel = df_colors[df_colors['rgb_tuple'] == pixel]
+                draw.text((x, y), df_pixel['symbol'].values[0], font=symbol_font, fill='black')
+
+        del draw
+        return img_input
+
+    def run(self, df_colors):
+        step_size = self.enlarge_factor
         enlarged_image = self.img_enlarge()
-        minor_gridlines_image = self.add_gridlines(enlarged_image, 'grey', self.enlarge_factor)
-        major_gridlines_image = self.add_gridlines(minor_gridlines_image, 'black', self.enlarge_factor*10)
+        df_colors_symbols = self.map_colors_to_symbols(df_colors)
+        img_symbols = self.add_symbols(df_colors_symbols, enlarged_image, step_size)
+
+        minor_gridlines_image = self.add_gridlines(img_symbols, 'grey', step_size)
+        major_gridlines_image = self.add_gridlines(minor_gridlines_image, 'black', step_size*10)
 
         return major_gridlines_image
+
