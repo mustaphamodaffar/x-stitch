@@ -1,4 +1,5 @@
 from img2xstitch.utils import PreprocessImg, MapImgToThread, MapImgToPattern
+import pathlib
 import argparse
 
 
@@ -15,7 +16,11 @@ def run(img_raw_path, cnt_stitch, cnt_colors, max_dim_abs_size):
                                            cnt_colors=cnt_colors)
     img_output = map_pattern_instance.run(df_colors=df_colors)
 
-    # Will eventually need to change to save the image, for now helpful with debugging
+    img_filename = pathlib.PurePath(img_raw_path).name
+    output_directory = 'test_outputs/'
+    pathlib.Path(output_directory).mkdir(parents=True, exist_ok=True)
+    img_output.save(output_directory + img_filename)
+
     img_output.show()
 
 
@@ -30,11 +35,11 @@ if __name__ == '__main__':
                        help="The aida stitch count. Not incorporated into the script yet.")
     parse.add_argument("--colors",
                        type=int,
-                       default=10,
+                       default=15,
                        help="The number of different thread colors the pattern should have.")
     parse.add_argument("--maxsize",
                        type=int,
-                       default=200,
+                       default=100,
                        help="The desired length or width, whichever is larger - depends on orientation of input image.")
     input_args = parse.parse_args()
 

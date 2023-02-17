@@ -1,7 +1,7 @@
 import logging
 import pandas as pd
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageFilter, ImageDraw, ImageFont
 from sklearn.cluster import KMeans
 from scipy.spatial import distance, cKDTree
 import random
@@ -55,14 +55,20 @@ class PreprocessImg:
 
         return img_scaled
 
+    def sharpen_image(self, img_input):
+        img_enhanced_edges = img_input.filter(ImageFilter.EDGE_ENHANCE)
+
+        return img_enhanced_edges
+
     def run(self):
         """Take an input image and get attributes required to scale an input image"""
         self.get_img_attr()
         self.get_orientation()
         self.calc_scaled_size()
         img_scaled = self.get_scaled_image()
+        img_output = self.sharpen_image(img_scaled)
 
-        return img_scaled
+        return img_output
 
 
 class MapImgToThread:
